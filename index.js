@@ -1,6 +1,6 @@
 const defaultConsoleMethods = ["log", "group", "groupEnd", "warn", "assert", "error"];
 
-export function prepareConsole(platformConsole, consoleMethods = defaultConsoleMethods) {
+export function prepareConsole(platformConsole, consoleMethods = defaultConsoleMethods, _window = window) {
   for (var i = 0; i < consoleMethods.length; i++)
     if (!platformConsole[consoleMethods[i]])
       platformConsole[consoleMethods[i]] = emptyFunc;
@@ -18,6 +18,7 @@ export function prepareConsole(platformConsole, consoleMethods = defaultConsoleM
       subscribers.push(c);
       addWrappers();
     }
+    installErrorCapture(c, _window);
   }
 
   platformConsole.removeConsumer = function(c) {
@@ -27,6 +28,7 @@ export function prepareConsole(platformConsole, consoleMethods = defaultConsoleM
     if (idx2 >= 0) simpleConsumers.splice(idx2, 1);
     if (!consumers.length && !simpleConsumers.length)
       removeWrappers();
+    removeErrorCapture(c, _window);
   }
 
   function emptyFunc() {}
@@ -90,4 +92,36 @@ function formatTemplateString(template, ...args) {
     else string = string + " " + String(args[i]);
   }
   return string;
+}
+
+
+function installErrorCapture(target, _window = window) {
+  if (!target._errorHandler) {
+    target._errorHandler = (function errorHandler(errEvent, url, lineNumber, column, errorObj) {
+      var err = errEvent.error || errEvent, msg;
+      if (err.stack) msg = String(err.stack);
+      else if (url) msg = `${err} ${url}:${lineNumber}`
+      else msg = String(err);
+      if (typeof target.error === "function") target.error(msg);
+    });
+    _window.addEventListener('error', target._errorHandler);
+  }
+  if (!target._errorHandlerForPromises) {
+    target._errorHandlerForPromises = function unhandledPromiseRejection(evt) {
+      if (typeof target.error === "function")
+        target.error('unhandled promise rejection:\n' + evt.reason);
+    };
+    _window.addEventListener('unhandledrejection', target._errorHandlerForPromises);
+  }
+}
+
+function removeErrorCapture(target, _window = window) {
+  if (target._errorHandler) {
+    _window.removeEventListener('error', target._errorHandler);
+    delete target._errorHandler;
+  }
+  if (!target._errorHandlerForPromises) {
+    _window.removeEventListener('unhandledrejection', target._errorHandlerForPromises);
+    delete target._errorHandlerForPromises;
+  }
 }
