@@ -21,4 +21,4 @@ console.removeConsumer(c);
 
 ## License
 
-[MIT](License)
+[MIT](LICENSE)
